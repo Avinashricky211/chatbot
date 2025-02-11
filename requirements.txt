@@ -1,0 +1,4 @@
+streamlit
+python-docx
+together
+pdf2image
