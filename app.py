@@ -200,7 +200,7 @@ def main():
     
     # API Configuration in main section
     with st.expander("API Configuration", expanded=False):
-        api_key = st.text_input("Enter Your Together API Key", type="password")
+        api_key = st.text_input("Enter Your Secret Key", type="password")
     
     if not api_key:
         st.warning("Please enter your API key to continue")
