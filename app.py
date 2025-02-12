@@ -203,7 +203,7 @@ def main():
         api_key = st.text_input("Enter Your Secret Key", type="password")
     
     if not api_key:
-        st.warning("Please enter your API key to continue")
+        st.warning("Please enter your secret key to continue")
         st.stop()
     
     try:
