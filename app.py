@@ -5,6 +5,7 @@ import io
 from PIL import Image
 import docx
 import os
+import PyPDF2
 
 class LlamaVisionChatbot:
     def __init__(self, api_key):
@@ -27,12 +28,13 @@ class LlamaVisionChatbot:
         Extract text from various document types using Llama Vision Model
         """
         try:
-            # PDF extraction
+            # PDF extraction using PyPDF2
             if uploaded_file.type == 'application/pdf':
-                from pdf2image import convert_from_bytes
-                images = convert_from_bytes(uploaded_file.getvalue(), first_page=1, last_page=1)
-                image = images[0]
-                return self._process_image_to_text(image)
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
+                return text.strip()
             
             # Word document extraction
             elif uploaded_file.type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
@@ -189,83 +191,123 @@ class LlamaVisionChatbot:
 
 def main():
     st.set_page_config(
-        page_title="Llama Vision Chatbot", 
-        page_icon=":robot:", 
-        layout="wide"
+        page_title="Llama Vision Chatbot",
+        page_icon=":robot:",
+        layout="centered"
     )
     
-    st.sidebar.title("Together API Configuration")
-    api_key = st.sidebar.text_input("Enter Your Together API Key", type="password")
+    st.title("Avinash Vision Chatbot 🤖")
     
-    if api_key:
-        try:
-            chatbot = LlamaVisionChatbot(api_key=api_key)
-            
-            st.sidebar.title("Navigation")
-            app_mode = st.sidebar.selectbox(
-                "Choose Your Task", 
-                ["Document Q&A", "Text Summarization", "Translation", "Vision Processing"]
+    # API Configuration in main section
+    with st.expander("API Configuration", expanded=False):
+        api_key = st.text_input("Enter Your Together API Key", type="password")
+    
+    if not api_key:
+        st.warning("Please enter your API key to continue")
+        st.stop()
+    
+    try:
+        chatbot = LlamaVisionChatbot(api_key=api_key)
+        
+        # Task Selection
+        app_mode = st.selectbox(
+            "Choose Your Task", 
+            ["Document Q&A", "Text Summarization", "Translation", "Vision Processing"]
+        )
+        
+        # File Upload
+        st.subheader("Upload Document")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            uploaded_file = st.file_uploader(
+                "Choose a file", 
+                type=['pdf', 'docx', 'txt', 'png', 'jpg'],
+                help="Supported formats: PDF, Word, Text, PNG, JPG"
             )
+        
+        if uploaded_file is not None:
+            # Show file details
+            with col2:
+                st.write("File Info:")
+                st.write(f"Size: {uploaded_file.size/1024:.1f} KB")
             
-            st.title("Avinash Vision Chatbot 🤖")
-            st.sidebar.header("Upload Document")
-            uploaded_file = st.sidebar.file_uploader("Choose a file", type=['pdf', 'docx', 'txt', 'png', 'jpg'])
+            extracted_text = chatbot.extract_text_from_document(uploaded_file)
             
-            if uploaded_file is not None:
-                extracted_text = chatbot.extract_text_from_document(uploaded_file)
+            # Document Q&A
+            if app_mode == "Document Q&A":
+                st.subheader("Ask Questions")
+                user_question = st.text_input("What would you like to know about the document?")
                 
-                if app_mode == "Document Q&A":
-                    st.subheader("Document Question & Answer")
-                    user_question = st.text_input("Ask a question about the document")
-                    
-                    if st.button("Get Answer") and user_question:
+                if st.button("Get Answer", type="primary", use_container_width=True) and user_question:
+                    with st.spinner("Processing your question..."):
                         answer = chatbot.chat_with_model(extracted_text, user_question)
-                        st.write("Answer:", answer)
                         if answer:
+                            st.success("Answer:")
+                            st.write(answer)
                             download_button = chatbot.download_content(answer, "qa_response")
                             st.markdown(download_button, unsafe_allow_html=True)
-                
-                elif app_mode == "Text Summarization":
-                    st.subheader("Document Summarization")
-                    
-                    if st.button("Summarize Document"):
+            
+            # Text Summarization
+            elif app_mode == "Text Summarization":
+                st.subheader("Document Summary")
+                if st.button("Generate Summary", type="primary", use_container_width=True):
+                    with st.spinner("Generating summary..."):
                         summary = chatbot.summarize_text(extracted_text)
-                        st.write("Summary:", summary)
                         if summary:
+                            st.success("Summary:")
+                            st.write(summary)
                             download_button = chatbot.download_content(summary, "document_summary")
                             st.markdown(download_button, unsafe_allow_html=True)
+            
+            # Translation
+            elif app_mode == "Translation":
+                st.subheader("Translation")
+                target_language = st.selectbox(
+                    "Select Target Language",
+                    ["Spanish", "French", "German", "Chinese", "Telugu"]
+                )
                 
-                elif app_mode == "Translation":
-                    st.subheader("Document Translation")
-                    target_language = st.selectbox("Select Target Language", ["Spanish", "French", "German", "Chinese", "Telugu"])
-                    
-                    if st.button("Translate"):
+                if st.button("Translate Document", type="primary", use_container_width=True):
+                    with st.spinner(f"Translating to {target_language}..."):
                         translation = chatbot.translate_text(extracted_text, target_language)
-                        st.write(f"Translation to {target_language}:", translation)
                         if translation:
-                            download_button = chatbot.download_content(translation, f"{target_language.lower()}_translation")
+                            st.success(f"Translation ({target_language}):")
+                            st.write(translation)
+                            download_button = chatbot.download_content(
+                                translation,
+                                f"{target_language.lower()}_translation"
+                            )
                             st.markdown(download_button, unsafe_allow_html=True)
-                
-                elif app_mode == "Vision Processing":
-                    st.subheader("Image Processing")
-                    if uploaded_file.type.startswith('image/'):
-                        image = Image.open(uploaded_file)
-                        st.image(image, caption='Uploaded Image', use_column_width=True)
-                        
-                        description = st.text_input("Optional description for image")
-                        
-                        if st.button("Process Image"):
+            
+            # Vision Processing
+            elif app_mode == "Vision Processing":
+                st.subheader("Image Analysis")
+                if uploaded_file.type.startswith('image/'):
+                    image = Image.open(uploaded_file)
+                    st.image(image, caption='Uploaded Image', use_column_width=True)
+                    
+                    description = st.text_input("Add optional description for context")
+                    
+                    if st.button("Analyze Image", type="primary", use_container_width=True):
+                        with st.spinner("Analyzing image..."):
                             result = chatbot.process_with_vision_model(image=image, text=description)
-                            st.write("Vision Model Output:", result)
                             if result:
+                                st.success("Analysis Results:")
+                                st.write(result)
                                 download_button = chatbot.download_content(result, "vision_output")
                                 st.markdown(download_button, unsafe_allow_html=True)
-        
-        except Exception as e:
-            st.error(f"Initialization Error: {e}")
+                else:
+                    st.error("Please upload an image file for vision processing.")
+                    
+        # Footer
+        st.markdown("---")
+        st.markdown(
+            "<div style='text-align: center'>Powered by Avinash</div>",
+            unsafe_allow_html=True
+        )
     
-    st.sidebar.markdown("---")
-    st.sidebar.info("Powered by Avinash")
+    except Exception as e:
+        st.error(f"Application Error: {e}")
 
 if __name__ == "__main__":
     main()
